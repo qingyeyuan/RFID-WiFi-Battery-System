@@ -1,9 +1,9 @@
+#include <EEPROM.h>
 #include "include/config.h"
 #include "include/utils.h"
 #include "include/sensors.h"
 #include "include/network.h"
 #include "include/display.h"
-#include <EEPROM.h>
 
 // 全局变量定义
 Config config;
@@ -20,6 +20,10 @@ void setup() {
 
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, HIGH);  // 初始化为高电平（不响）
+  
+  // 初始化充电状态LED
+  pinMode(CHARGE_LED_PIN, OUTPUT);
+  digitalWrite(CHARGE_LED_PIN, LOW);  // 初始化为低电平（关闭）
   
   // 初始化Boot按钮
   pinMode(BOOT_PIN, INPUT);
@@ -56,7 +60,10 @@ void loop() {
     // 检查电池充电状态并控制LED
     bool isCharging = checkBatteryCharging();
     if (isCharging) {
+      digitalWrite(CHARGE_LED_PIN, HIGH);
       Serial.println("[BATT] 电池正在充电...");
+    } else {
+      digitalWrite(CHARGE_LED_PIN, LOW);
     }
     
     // 检查温度和湿度，超过阈值触发警报
