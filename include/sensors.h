@@ -63,6 +63,14 @@ void sendDataToServer();
 BatteryInfo getBatteryInfo(const String& uid);
 
 /**
+ * @brief 向RFID卡片写入数据块
+ * @param blockAddr 块地址
+ * @param buffer 数据缓冲区
+ * @return 是否写入成功
+ */
+bool writeBlock(byte blockAddr, byte* buffer);
+
+/**
  * @brief 检测电池充电状态并控制LED
  * @return 是否正在充电
  */

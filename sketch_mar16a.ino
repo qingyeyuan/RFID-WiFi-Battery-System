@@ -4,6 +4,7 @@
 #include "include/sensors.h"
 #include "include/network.h"
 #include "include/display.h"
+#define ESP32_DISABLE_BROWNOUT_DETECTOR 1
 
 // 全局变量定义
 Config config;

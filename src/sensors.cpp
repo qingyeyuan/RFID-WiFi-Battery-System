@@ -195,6 +195,21 @@ bool checkRFID() {
         // 获取电池信息（在停止卡片前读取块数据）
         currentBattery = getBatteryInfo(lastUID);
         
+        // 增加循环次数
+        currentBattery.cycleCount++;
+        Serial.println(">>> 循环次数已更新: " + String(currentBattery.cycleCount));
+        
+        // 将更新后的循环次数写回卡片
+        byte block6Buffer[16] = {0}; // 16字节缓冲区，初始化为0
+        String cycleCountStr = String(currentBattery.cycleCount);
+        cycleCountStr.getBytes(block6Buffer, 16); // 将字符串转换为字节数组
+        
+        if (writeBlock(6, block6Buffer)) {
+          Serial.println(">>> 循环次数已写入卡片");
+        } else {
+          Serial.println(">>> 循环次数写入失败");
+        }
+        
         // 尝试停止卡片，即使失败也继续
         try {
           mfrc522->PICC_HaltA();
@@ -382,6 +397,45 @@ String extractString(byte* buffer, byte length) {
 }
 
 /**
+ * @brief 向RFID卡片写入数据块
+ * @param blockAddr 块地址
+ * @param buffer 数据缓冲区
+ * @return 是否写入成功
+ */
+bool writeBlock(byte blockAddr, byte* buffer) {
+  if (mfrc522 == nullptr) return false;
+  
+  // 默认密钥（用于MIFARE Classic卡片）
+  MFRC522::MIFARE_Key key;
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF; // 默认密钥
+  }
+  
+  // 授权块
+  MFRC522::StatusCode status = mfrc522->PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockAddr, &key, &mfrc522->uid);
+  if (status != MFRC522::STATUS_OK) {
+    Serial.printf("[ERR] 授权失败: %s\n", mfrc522->GetStatusCodeName(status));
+    return false;
+  }
+  
+  // 写入块数据
+  status = mfrc522->MIFARE_Write(blockAddr, buffer, 16); // 写入16字节
+  if (status != MFRC522::STATUS_OK) {
+    Serial.printf("[ERR] 写入失败: %s\n", mfrc522->GetStatusCodeName(status));
+    return false;
+  }
+  
+  // 打印写入的数据（调试用）
+  Serial.printf("[DBG] 块 %d 已写入: ", blockAddr);
+  for (byte i = 0; i < 16; i++) { // 只打印16字节数据
+    Serial.printf("%02X ", buffer[i]);
+  }
+  Serial.println();
+  
+  return true;
+}
+
+/**
  * @brief 根据RFID UID获取电池信息
  * @param uid RFID UID
  * @return 电池信息
@@ -427,6 +481,24 @@ BatteryInfo getBatteryInfo(const String& uid) {
     }
     productionDate[j] = '\0';
     info.productionDate = String(productionDate);
+  }
+  
+  // 读取块6获取循环次数
+  byte block6Buffer[18]; // 增大缓冲区
+  if (readBlock(6, block6Buffer)) {
+    // 尝试从缓冲区中解析循环次数
+    char cycleCountStr[17]; // 16个字符 + 结束符
+    int j = 0;
+    for (int i = 0; i < 16 && j < 16; i++) {
+      if (block6Buffer[i] != 0x00 && block6Buffer[i] >= 0x20 && block6Buffer[i] <= 0x7E) {
+        cycleCountStr[j++] = (char)block6Buffer[i];
+      } else if (block6Buffer[i] == 0x00) {
+        break;
+      }
+    }
+    cycleCountStr[j] = '\0';
+    // 将字符串转换为整数
+    info.cycleCount = atoi(cycleCountStr);
   }
   
   return info;
