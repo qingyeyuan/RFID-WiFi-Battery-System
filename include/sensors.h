@@ -3,12 +3,11 @@
 
 #include "config.h"
 #include <Adafruit_SHT31.h>
-#include <Adafruit_INA219.h>
+#include <INA226_WE.h>
 #include <MFRC522.h>
 
 // 电池信息结构
 typedef struct {
-  String uid;           // RFID UID
   String batteryId;     // 电池编号
   String productionDate; // 生产日期
   int cycleCount;       // 循环充电次数
@@ -16,7 +15,7 @@ typedef struct {
 
 // 传感器对象指针（在 initSensors 中创建）
 extern Adafruit_SHT31* sht31;
-extern Adafruit_INA219* ina219;
+extern INA226_WE*        ina226;
 extern MFRC522*        mfrc522;
 
 // 全局变量
@@ -42,13 +41,13 @@ bool readTH(float* temperature, float* humidity);
 bool checkRFID();
 
 /**
- * @brief 读取INA219电流电压数据
+ * @brief 读取INA226电流电压数据
  * @param voltage 电压变量指针
  * @param current 电流变量指针
  * @param power 功率变量指针
  * @return 是否读取成功
  */
-bool readINA219(float* voltage, float* current, float* power);
+bool readINA226(float* voltage, float* current, float* power);
 
 /**
  * @brief 发送数据到服务器
@@ -69,11 +68,5 @@ BatteryInfo getBatteryInfo(const String& uid);
  * @return 是否写入成功
  */
 bool writeBlock(byte blockAddr, byte* buffer);
-
-/**
- * @brief 检测电池充电状态并控制LED
- * @return 是否正在充电
- */
-bool checkBatteryCharging();
 
 #endif // SENSORS_H

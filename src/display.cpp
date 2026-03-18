@@ -52,11 +52,11 @@ void updateOLED() {
     float batteryVoltage = readBatteryVoltage();
     float soc  = calcSOC(batteryVoltage);
     
-    // 读取INA219数据
+    // 读取INA226数据
     float inaVoltage = 0.0;
     float inaCurrent = 0.0;
     float inaPower = 0.0;
-    readINA219(&inaVoltage, &inaCurrent, &inaPower);
+    readINA226(&inaVoltage, &inaCurrent, &inaPower);
     
     // 清除显示
     display->clearDisplay();
@@ -75,45 +75,45 @@ void updateOLED() {
     display->print(h, 1);
     display->print("%");
     
-    // 第二行：电池电压和电量
-    display->setCursor(0, 12);
-    display->print("Bat:");
-    display->print(batteryVoltage, 2);
-    display->print("V");
-    display->setCursor(70, 12);
-    display->print("SOC:");
-    display->print(soc, 0);
-    display->print("%");
-    
-    // 第三行：INA219电压和电流
-    display->setCursor(0, 24);
+    // 第二行：INA226电压和电量
+    display->setCursor(0, 10);
     display->print("V:");
     display->print(inaVoltage, 2);
     display->print("V");
-    display->setCursor(70, 24);
+    display->setCursor(70, 10);
+    display->print("SOC:");
+    display->print(soc, 0);
+    display->print("%");
+
+    // 第三行：电流和功率
+    display->setCursor(0, 20);
     display->print("I:");
-    display->print(inaCurrent, 2);
+    display->print(inaCurrent, 3);
     display->print("A");
-    
-    // 第四行：功率和WiFi状态
-    display->setCursor(0, 36);
+    display->setCursor(70, 20);
     display->print("P:");
     display->print(inaPower, 2);
     display->print("W");
-    display->setCursor(70, 36);
+
+    // 第四行：WiFi状态和循环次数
+    display->setCursor(0, 30);
     display->print("WiFi:");
     display->print(WiFi.status() == WL_CONNECTED ? "ON" : "OFF");
-    
-    // 第五行：RFID UID
-    display->setCursor(0, 48);
-    display->print("UID:");
-    display->print(lastUID.length() > 10 ? lastUID.substring(0, 10) + "..." : lastUID);
-    
-    // 第六行：电池编号
-    display->setCursor(0, 56);
+    display->setCursor(70, 30);
+    display->print("Cycle:");
+    display->print(currentBattery.cycleCount);
+
+    // 第五行：电池编号
+    display->setCursor(0, 40);
     display->print("ID:");
-    display->print(currentBattery.batteryId.length() > 8 ? currentBattery.batteryId.substring(0, 8) : currentBattery.batteryId);
+    display->print(currentBattery.batteryId.length() > 10 ? currentBattery.batteryId.substring(0, 10) : currentBattery.batteryId);
     
+    // 第六行：生产日期
+    display->setCursor(0, 50);
+    display->print("Date:");
+    display->print(currentBattery.productionDate.length() > 10 ? currentBattery.productionDate.substring(0, 10) : currentBattery.productionDate);
+    
+  
     // 刷新显示
     display->display();
   } catch (...) {
@@ -141,21 +141,19 @@ void printStatus() {
   float batteryVoltage = readBatteryVoltage();
   float soc  = calcSOC(batteryVoltage);
   
-  // 读取INA219数据
+  // 读取INA226数据
   float inaVoltage = 0.0;
   float inaCurrent = 0.0;
   float inaPower = 0.0;
-  readINA219(&inaVoltage, &inaCurrent, &inaPower);
+  readINA226(&inaVoltage, &inaCurrent, &inaPower);
 
   Serial.println("─────────────────────────");
   Serial.printf("温度: %.1f°C   湿度: %.1f%%\n", t, h);
-  Serial.printf("电池: %.2fV   电量: %.0f%%\n", batteryVoltage, soc);
-  Serial.printf("电压: %.2fV   电流: %.3fA\n", inaVoltage, inaCurrent);
-  Serial.printf("功率: %.3fW   WiFi: %s\n", inaPower, WiFi.status() == WL_CONNECTED ? "ON" : "OFF");
-  Serial.printf("UID: %s\n", lastUID.c_str());
+  Serial.printf("电压: %.2fV   电量: %.0f%%\n", inaVoltage, soc);
+  Serial.printf("电流: %.3fA   功率: %.2fW\n", inaCurrent, inaPower);
+  Serial.printf("WiFi: %s   循环次数: %d\n", WiFi.status() == WL_CONNECTED ? "ON" : "OFF", currentBattery.cycleCount);
   Serial.printf("电池编号: %s\n", currentBattery.batteryId.c_str());
   Serial.printf("生产日期: %s\n", currentBattery.productionDate.c_str());
-  Serial.printf("循环次数: %d\n", currentBattery.cycleCount);
   
   // 更新OLED显示
   updateOLED();

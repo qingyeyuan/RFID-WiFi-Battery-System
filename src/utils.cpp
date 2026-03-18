@@ -1,5 +1,6 @@
 #include <EEPROM.h>
 #include "../include/utils.h"
+#include "../include/sensors.h"
 
 /**
  * @brief 控制蜂鸣器发出声音
@@ -16,13 +17,14 @@ void beep(int ms) {
  * @return 电池电压值（V）
  */
 float readBatteryVoltage() {
-  long total = 0;
-  for (int i = 0; i < 10; i++) {
-    total += analogRead(BATTERY_PIN);
-    delay(2);
+  // 使用INA226测量电池电压
+  if (ina226 != nullptr) {
+    float voltage = ina226->getBusVoltage_V();
+    if (!isnan(voltage) && voltage > 0) {
+      return voltage;
+    }
   }
-  float pinV = (total / 10.0 / ADC_RESOLUTION) * 1.1;
-  return pinV * VOLTAGE_DIVIDER_RATIO;
+  return 0.0;
 }
 
 /**
@@ -31,7 +33,15 @@ float readBatteryVoltage() {
  * @return 电池电量百分比（0-100%）
  */
 float calcSOC(float voltage) {
-  return constrain((voltage - BATT_MIN_V) / (BATT_MAX_V - BATT_MIN_V) * 100.0, 0.0, 100.0);
+  // 检查电压是否有效
+  if (voltage <= 0) {
+    Serial.println("[ERR] 电压值无效，返回电量0%");
+    return 0.0;
+  }
+  
+  float soc = constrain((voltage - BATT_MIN_V) / (BATT_MAX_V - BATT_MIN_V) * 100.0, 0.0, 100.0);
+  Serial.printf("[DBG] 电压: %.2fV, 电量: %.0f%%\n", voltage, soc);
+  return soc;
 }
 
 /**
@@ -47,9 +57,34 @@ void readConfig() {
     strcpy(config.server_ip, "192.168.1.100");
     config.server_port = 8080;
     strcpy(config.device_id, "25824");
+    config.shunt_resistor = 0.1; // 默认分流电阻值为0.1欧姆
+    config.temp_max = 30.0; // 默认温度上限报警值为30°C
+    config.temp_min = 0.0; // 默认温度下限报警值为0°C
+    config.humidity_max = 80.0; // 默认湿度上限报警值为80%
+    config.humidity_min = 20.0; // 默认湿度下限报警值为20%
     config.configured = false;
+  } else {
+    // 确保分流电阻值有效
+    if (config.shunt_resistor <= 0 || isnan(config.shunt_resistor)) {
+      config.shunt_resistor = 0.1; // 如果分流电阻值无效，使用默认值
+      Serial.println("[CFG] 分流电阻值无效，使用默认值0.1欧姆");
+    }
+    // 确保温湿度报警值有效
+    if (config.temp_max <= config.temp_min || isnan(config.temp_max) || isnan(config.temp_min)) {
+      config.temp_max = 30.0;
+      config.temp_min = 0.0;
+      Serial.println("[CFG] 温度报警值无效，使用默认值");
+    }
+    if (config.humidity_max <= config.humidity_min || isnan(config.humidity_max) || isnan(config.humidity_min)) {
+      config.humidity_max = 80.0;
+      config.humidity_min = 20.0;
+      Serial.println("[CFG] 湿度报警值无效，使用默认值");
+    }
   }
   Serial.println("[CFG] 配置读取完成");
+  Serial.printf("[CFG] 分流电阻值: %.2f欧姆\n", config.shunt_resistor);
+  Serial.printf("[CFG] 温度报警范围: %.1f°C - %.1f°C\n", config.temp_min, config.temp_max);
+  Serial.printf("[CFG] 湿度报警范围: %.0f%% - %.0f%%\n", config.humidity_min, config.humidity_max);
 }
 
 /**

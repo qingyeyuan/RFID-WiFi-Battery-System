@@ -220,6 +220,44 @@ void handleRoot() {
   html += "<input type=\"text\" id=\"device_id\" name=\"device_id\" placeholder=\"例如: DEV-001\" value=\"" + String(config.device_id) + "\">";
   html += "</div>";
   
+  // 分流电阻值设置
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"shunt_resistor\">分流电阻值 (欧姆)</label>";
+  html += "<input type=\"number\" id=\"shunt_resistor\" name=\"shunt_resistor\" step=\"0.01\" min=\"0.01\" placeholder=\"例如: 0.1\" value=\"" + String(config.shunt_resistor) + "\">";
+  html += "<small style=\"display:block; margin-top:6px; color:var(--text-muted); font-size:12px;\">";
+  html += "<strong>配置提示：</strong><br>";
+  html += "- 小电流场景 (0-1A)：0.1-0.5Ω<br>";
+  html += "- 中等电流场景 (1-5A)：0.05-0.1Ω<br>";
+  html += "- 大电流场景 (5A以上)：0.01-0.05Ω<br>";
+  html += "请根据实际硬件使用的分流电阻值进行设置。";
+  html += "</small>";
+  html += "</div>";
+  
+  // 温湿度报警值设置
+  html += "<div class=\"section-title\">温湿度报警设置</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"temp_max\">温度上限 (°C)</label>";
+  html += "<input type=\"number\" id=\"temp_max\" name=\"temp_max\" step=\"0.5\" min=\"-20\" max=\"100\" placeholder=\"例如: 30\" value=\"" + String(config.temp_max) + "\">";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"temp_min\">温度下限 (°C)</label>";
+  html += "<input type=\"number\" id=\"temp_min\" name=\"temp_min\" step=\"0.5\" min=\"-20\" max=\"100\" placeholder=\"例如: 0\" value=\"" + String(config.temp_min) + "\">";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"humidity_max\">湿度上限 (%)</label>";
+  html += "<input type=\"number\" id=\"humidity_max\" name=\"humidity_max\" step=\"1\" min=\"0\" max=\"100\" placeholder=\"例如: 80\" value=\"" + String(config.humidity_max) + "\">";
+  html += "</div>";
+  html += "<div class=\"form-group\">";
+  html += "<label for=\"humidity_min\">湿度下限 (%)</label>";
+  html += "<input type=\"number\" id=\"humidity_min\" name=\"humidity_min\" step=\"1\" min=\"0\" max=\"100\" placeholder=\"例如: 20\" value=\"" + String(config.humidity_min) + "\">";
+  html += "<small style=\"display:block; margin-top:6px; color:var(--text-muted); font-size:12px;\">";
+  html += "<strong>配置提示：</strong><br>";
+  html += "- 温度范围：-20°C 到 100°C<br>";
+  html += "- 湿度范围：0% 到 100%<br>";
+  html += "请根据实际环境需求设置报警阈值。";
+  html += "</small>";
+  html += "</div>";
+  
   html += "<button type=\"submit\" class=\"btn btn-primary\">保存配置并重启</button>";
   html += "</form>";
   html += "</div>";
@@ -260,6 +298,11 @@ void handleSaveConfig() {
   String server_ip = server->arg("server_ip");
   int server_port = server->arg("server_port").toInt();
   String device_id = server->arg("device_id");
+  float shunt_resistor = server->arg("shunt_resistor").toFloat();
+  float temp_max = server->arg("temp_max").toFloat();
+  float temp_min = server->arg("temp_min").toFloat();
+  float humidity_max = server->arg("humidity_max").toFloat();
+  float humidity_min = server->arg("humidity_min").toFloat();
   
   // 保存到配置
   ssid.toCharArray(config.ssid, sizeof(config.ssid));
@@ -267,6 +310,27 @@ void handleSaveConfig() {
   server_ip.toCharArray(config.server_ip, sizeof(config.server_ip));
   config.server_port = server_port;
   device_id.toCharArray(config.device_id, sizeof(config.device_id));
+  // 确保分流电阻值有效
+  if (shunt_resistor > 0) {
+    config.shunt_resistor = shunt_resistor;
+  } else {
+    config.shunt_resistor = 0.1; // 默认值
+  }
+  // 确保温湿度报警值有效
+  if (temp_max > temp_min) {
+    config.temp_max = temp_max;
+    config.temp_min = temp_min;
+  } else {
+    config.temp_max = 30.0;
+    config.temp_min = 0.0;
+  }
+  if (humidity_max > humidity_min) {
+    config.humidity_max = humidity_max;
+    config.humidity_min = humidity_min;
+  } else {
+    config.humidity_max = 80.0;
+    config.humidity_min = 20.0;
+  }
   config.configured = true;
   
   // 保存到EEPROM

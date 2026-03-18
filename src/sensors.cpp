@@ -6,7 +6,7 @@
 
 // 传感器对象指针
 Adafruit_SHT31* sht31 = nullptr;
-Adafruit_INA219* ina219 = nullptr;
+INA226_WE*        ina226 = nullptr;
 MFRC522*        mfrc522 = nullptr;
 WiFiClient*     client = nullptr;
 
@@ -44,37 +44,61 @@ void initSensors() {
   mfrc522->PCD_Init();
   Serial.println("[OK]  RFID 就绪");
 
-  // I2C2 → INA219
+  // I2C2 → INA226
   Wire.begin(I2C2_SDA, I2C2_SCL);
   Wire.setClock(100000); // 设置I2C时钟速度为100kHz
 
-  // 创建 INA219 对象
-  ina219 = new Adafruit_INA219();
+  // 创建 INA226 对象
+  ina226 = new INA226_WE(&Wire);
   
-  bool ina219Ok = false;
-  for (int i = 0; i < 3 && !ina219Ok; i++) {
-    if (ina219->begin(&Wire)) {
-      ina219Ok = true;
-      Serial.println("[OK]  INA219 就绪");
+  bool ina226Ok = false;
+  for (int i = 0; i < 3 && !ina226Ok; i++) {
+    if (ina226->init()) {
+      ina226Ok = true;
+      
+      // 设置分流电阻
+      float resistorValue = 0.1;  // 默认值
+      bool useDefault = false;
+      
+      // 检查配置值是否有效
+      if (config.shunt_resistor > 0 && !isnan(config.shunt_resistor)) {
+        // 尝试使用配置值
+        ina226->setResistorRange(config.shunt_resistor);
+        if (ina226->getI2cErrorCode() == 0) {
+          resistorValue = config.shunt_resistor;
+          Serial.printf("[OK]  分流电阻值设置成功: %.2f欧姆\n", resistorValue);
+        } else {
+          // 配置值设置失败，使用默认值重试
+          useDefault = true;
+          Serial.printf("[WARN] 配置值 %.2f欧姆 设置失败，尝试默认值...\n", config.shunt_resistor);
+        }
+      } else {
+        useDefault = true;
+        Serial.printf("[WARN] 分流电阻配置值无效(%.2f)，使用默认值\n", config.shunt_resistor);
+      }
+      
+      // 使用默认值
+      if (useDefault) {
+        ina226->setResistorRange(0.1);
+        if (ina226->getI2cErrorCode() == 0) {
+          Serial.printf("[OK]  使用默认分流电阻值: 0.1欧姆\n");
+        } else {
+          Serial.println("[ERR] 分流电阻设置失败，电流测量可能不准确");
+        }
+      }
+      
+      Serial.println("[OK]  INA226 就绪");
     } else {
-      Serial.printf("[ERR] INA219 初始化失败 (尝试 %d/3)，检查 GPIO21/22 接线!\n", i+1);
+      Serial.printf("[ERR] INA226 初始化失败 (尝试 %d/3)，检查 GPIO21/22 接线!\n", i+1);
       delay(500);
     }
   }
-  if (!ina219Ok) {
-    Serial.println("[ERR] INA219 初始化失败，将继续运行但无法读取电流电压数据");
+  if (!ina226Ok) {
+    Serial.println("[ERR] INA226 初始化失败，将继续运行但无法读取电流电压数据");
   }
 
   // 创建 TCP 客户端
   client = new WiFiClient();
-
-  // ADC
-  analogSetPinAttenuation(BATTERY_PIN, ADC_0db);
-  pinMode(BATTERY_PIN, INPUT);
-  
-  // 充电状态LED
-  pinMode(CHARGE_LED_PIN, OUTPUT);
-  digitalWrite(CHARGE_LED_PIN, LOW); // 初始关闭
 }
 
 /**
@@ -98,6 +122,23 @@ bool readTH(float* temperature, float* humidity) {
     *humidity = sht31->readHumidity();
     
     if (!isnan(*temperature) && !isnan(*humidity)) {
+      // 检查温湿度是否超出报警阈值
+      if (*temperature > config.temp_max) {
+        Serial.printf("[ALARM] 温度过高: %.1f°C (上限: %.1f°C)\n", *temperature, config.temp_max);
+        beep(500); // 长鸣报警
+      } else if (*temperature < config.temp_min) {
+        Serial.printf("[ALARM] 温度过低: %.1f°C (下限: %.1f°C)\n", *temperature, config.temp_min);
+        beep(500); // 长鸣报警
+      }
+      
+      if (*humidity > config.humidity_max) {
+        Serial.printf("[ALARM] 湿度过高: %.1f%% (上限: %.1f%%)\n", *humidity, config.humidity_max);
+        beep(500); // 长鸣报警
+      } else if (*humidity < config.humidity_min) {
+        Serial.printf("[ALARM] 湿度过低: %.1f%% (下限: %.1f%%)\n", *humidity, config.humidity_min);
+        beep(500); // 长鸣报警
+      }
+      
       return true;
     }
     
@@ -117,29 +158,40 @@ bool readTH(float* temperature, float* humidity) {
 }
 
 /**
- * @brief 读取INA219电流电压数据
+ * @brief 读取INA226电流电压数据
  * @param voltage 电压变量指针
  * @param current 电流变量指针
  * @param power 功率变量指针
  * @return 是否读取成功
  */
-bool readINA219(float* voltage, float* current, float* power) {
-  if (ina219 == nullptr) {
+bool readINA226(float* voltage, float* current, float* power) {
+  if (ina226 == nullptr) {
     *voltage = 0.0;
     *current = 0.0;
     *power = 0.0;
+    Serial.println("[ERR] INA226 对象为nullptr");
     return false;
   }
   
   unsigned long start = millis();
+  bool voltageValid = false;
   
-  // 尝试读取INA219数据，最多尝试3次
+  // 尝试读取INA226数据，最多尝试3次
   for (int i = 0; i < 3; i++) {
-    *voltage = ina219->getBusVoltage_V();
-    *current = ina219->getCurrent_mA() / 1000.0; // 转换为A
-    *power = ina219->getPower_mW() / 1000.0;     // 转换为W
+    *voltage = ina226->getBusVoltage_V(); // 直接获取V
+    *current = ina226->getCurrent_A();    // 直接获取A
+    *power = ina226->getBusPower();       // 获取W
     
-    if (!isnan(*voltage) && !isnan(*current) && !isnan(*power)) {
+    Serial.printf("[DBG] 读取INA226数据 (尝试 %d/3): 电压=%.2fV, 电流=%.3fA, 功率=%.3fW\n", i+1, *voltage, *current, *power);
+    
+    // 检查电压是否有效
+    if (!isnan(*voltage) && *voltage > 0) {
+      voltageValid = true;
+    }
+    
+    // 检查所有数据是否有效
+    if (voltageValid && !isnan(*current) && !isnan(*power)) {
+      Serial.println("[OK] INA226数据读取成功");
       return true;
     }
     
@@ -152,11 +204,25 @@ bool readINA219(float* voltage, float* current, float* power) {
     }
   }
   
-  // 读取失败，设置默认值
-  *voltage = 0.0;
-  *current = 0.0;
-  *power = 0.0;
-  return false;
+  // 再次检查电压是否有效，确保即使循环中没有设置voltageValid，也能正确处理
+  if (!isnan(*voltage) && *voltage > 0) {
+    voltageValid = true;
+  }
+  
+  // 如果电压有效但电流或功率无效，保持电压值
+  if (voltageValid) {
+    *current = 0.0;
+    *power = 0.0;
+    Serial.println("[WARN] INA226电流或功率读取失败，只返回电压值");
+    return true; // 返回true，因为至少电压是有效的
+  } else {
+    // 所有数据都无效，设置默认值
+    *voltage = 0.0;
+    *current = 0.0;
+    *power = 0.0;
+    Serial.println("[ERR] INA226数据读取失败");
+    return false;
+  }
 }
 
 /**
@@ -225,7 +291,6 @@ bool checkRFID() {
         Serial.println(">>> 循环充电次数: " + String(currentBattery.cycleCount));
         beep(80);
 
-        lastUpdate = millis();
         return true;
       }
     }
@@ -286,20 +351,18 @@ void sendDataToServer() {
   // 尝试读取温湿度数据
   readTH(&temperature, &humidity);
   
-  // 尝试读取INA219数据
+  // 尝试读取INA226数据
   float inaVoltage = 0.0;
   float inaCurrent = 0.0;
   float inaPower = 0.0;
-  readINA219(&inaVoltage, &inaCurrent, &inaPower);
+  readINA226(&inaVoltage, &inaCurrent, &inaPower);
 
   // 构建JSON数据（按照要求的命名规范）
   String jsonData = "{";
   jsonData += "\"number\": \"" + String(config.device_id) + "\",";
-  jsonData += "\"voltage\": \"" + String(batteryVoltage, 2) + "\",";
   jsonData += "\"soc\": \"" + String(soc, 0) + "\",";
   jsonData += "\"temp\": \"" + String(temperature, 1) + "\",";
   jsonData += "\"humidity\": \"" + String(humidity, 1) + "\",";
-  jsonData += "\"rfid\": \"" + lastUID + "\",";
   jsonData += "\"battery_id\": \"" + currentBattery.batteryId + "\",";
   jsonData += "\"production_date\": \"" + currentBattery.productionDate + "\",";
   jsonData += "\"cycle_count\": \"" + String(currentBattery.cycleCount) + "\",";
@@ -379,24 +442,6 @@ bool readBlock(byte blockAddr, byte* buffer) {
 }
 
 /**
- * @brief 从数据块中提取字符串
- * @param buffer 数据缓冲区
- * @param length 缓冲区长度
- * @return 提取的字符串
- */
-String extractString(byte* buffer, byte length) {
-  String result = "";
-  for (byte i = 0; i < length; i++) {
-    if (buffer[i] != 0x00 && buffer[i] >= 0x20 && buffer[i] <= 0x7E) { // 只处理可打印字符
-      result += (char)buffer[i];
-    } else if (buffer[i] == 0x00) {
-      break;
-    }
-  }
-  return result;
-}
-
-/**
  * @brief 向RFID卡片写入数据块
  * @param blockAddr 块地址
  * @param buffer 数据缓冲区
@@ -437,12 +482,10 @@ bool writeBlock(byte blockAddr, byte* buffer) {
 
 /**
  * @brief 根据RFID UID获取电池信息
- * @param uid RFID UID
  * @return 电池信息
  */
 BatteryInfo getBatteryInfo(const String& uid) {
   BatteryInfo info;
-  info.uid = uid;
   
   // 初始化默认值
   info.batteryId = "UNKNOWN";
@@ -502,31 +545,4 @@ BatteryInfo getBatteryInfo(const String& uid) {
   }
   
   return info;
-}
-
-/**
- * @brief 检测电池充电状态并控制LED
- * @return 是否正在充电
- */
-bool checkBatteryCharging() {
-  if (ina219 == nullptr) {
-    return false;
-  }
-  
-  float voltage = 0.0;
-  float current = 0.0;
-  float power = 0.0;
-  
-  // 读取INA219数据
-  if (readINA219(&voltage, &current, &power)) {
-    // 当电流为负时，表示电池正在充电
-    bool isCharging = (current < 0);
-    
-    // 控制充电状态LED
-    digitalWrite(CHARGE_LED_PIN, isCharging ? HIGH : LOW);
-    
-    return isCharging;
-  }
-  
-  return false;
 }

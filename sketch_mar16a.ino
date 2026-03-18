@@ -9,7 +9,6 @@
 // 全局变量定义
 Config config;
 String        lastUID    = "Waiting...";
-unsigned long lastUpdate = 0;
 unsigned long lastSend   = 0;
 unsigned long bootPressTime = 0;
 
@@ -21,10 +20,6 @@ void setup() {
 
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, HIGH);  // 初始化为高电平（不响）
-  
-  // 初始化充电状态LED
-  pinMode(CHARGE_LED_PIN, OUTPUT);
-  digitalWrite(CHARGE_LED_PIN, LOW);  // 初始化为低电平（关闭）
   
   // 初始化Boot按钮
   pinMode(BOOT_PIN, INPUT);
@@ -58,28 +53,10 @@ void loop() {
     lastStatusUpdate = millis();
     printStatus();
     
-    // 检查电池充电状态并控制LED
-    bool isCharging = checkBatteryCharging();
-    if (isCharging) {
-      digitalWrite(CHARGE_LED_PIN, HIGH);
-      Serial.println("[BATT] 电池正在充电...");
-    } else {
-      digitalWrite(CHARGE_LED_PIN, LOW);
-    }
-    
-    // 检查温度和湿度，超过阈值触发警报
-    float t, h;
-    if (readTH(&t, &h)) {
-      if (t > 25.0 || h >= 90.0) {
-        Serial.println("[ALERT] 温度或湿度超过阈值！");
-        beep(200);
-        delay(100);
-        beep(200);
-      }
-    }
+    // 温湿度报警已在readTH函数中处理
   }
 
-  // 定时发送数据（10秒）
+  // 定时发送数据（3秒）
   if (millis() - lastSend >= SEND_INTERVAL) {
     lastSend = millis();
     sendDataToServer();
