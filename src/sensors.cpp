@@ -364,9 +364,11 @@ void sendDataToServer() {
   // 构建JSON数据（按照要求的命名规范）
   String jsonData = "{";
   jsonData += "\"number\": \"" + String(config.device_id) + "\",";
+  jsonData += "\"voltage\": \"" + String(batteryVoltage, 2) + "\",";
   jsonData += "\"soc\": \"" + String(soc, 0) + "\",";
   jsonData += "\"temp\": \"" + String(temperature, 1) + "\",";
   jsonData += "\"humidity\": \"" + String(humidity, 1) + "\",";
+  jsonData += "\"rfid\": \"" + lastUID + "\",";
   jsonData += "\"battery_id\": \"" + currentBattery.batteryId + "\",";
   jsonData += "\"production_date\": \"" + currentBattery.productionDate + "\",";
   jsonData += "\"cycle_count\": \"" + String(currentBattery.cycleCount) + "\",";
