@@ -316,20 +316,34 @@ void handleSaveConfig() {
   } else {
     config.shunt_resistor = 0.1; // 默认值
   }
-  // 确保温湿度报警值有效
-  if (temp_max > temp_min) {
+  // 确保温湿度报警值有效（包含范围检查）
+  const float TEMP_MIN_RANGE = -20.0;
+  const float TEMP_MAX_RANGE = 100.0;
+  const float HUMIDITY_MIN_RANGE = 0.0;
+  const float HUMIDITY_MAX_RANGE = 100.0;
+  
+  bool tempValid = (temp_max > temp_min && 
+                    temp_min >= TEMP_MIN_RANGE && 
+                    temp_max <= TEMP_MAX_RANGE);
+  bool humidityValid = (humidity_max > humidity_min && 
+                        humidity_min >= HUMIDITY_MIN_RANGE && 
+                        humidity_max <= HUMIDITY_MAX_RANGE);
+  
+  if (tempValid) {
     config.temp_max = temp_max;
     config.temp_min = temp_min;
   } else {
     config.temp_max = 30.0;
     config.temp_min = 0.0;
+    Serial.println("[CFG] 温度报警值无效，使用默认值(0~30°C)");
   }
-  if (humidity_max > humidity_min) {
+  if (humidityValid) {
     config.humidity_max = humidity_max;
     config.humidity_min = humidity_min;
   } else {
     config.humidity_max = 80.0;
     config.humidity_min = 20.0;
+    Serial.println("[CFG] 湿度报警值无效，使用默认值(20~80%)");
   }
   config.configured = true;
   

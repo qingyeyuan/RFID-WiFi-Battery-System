@@ -31,6 +31,8 @@ void initDisplay() {
     }
   }
   if (!displayOk) {
+    delete display;
+    display = nullptr;
     Serial.println("[ERR] OLED 初始化失败，将继续运行但无法显示数据");
   }
 }

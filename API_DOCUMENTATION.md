@@ -1,82 +1,50 @@
-# 服务器数据接口文档
+# TCP数据接口
 
-## 1. 接口概述
+> ESP32设备 → TCP服务器，JSON格式，长连接
 
-本设备通过TCP协议向服务器发送传感器数据，采用JSON格式进行数据传输。数据发送间隔为3秒，保持长连接。
+## 连接参数
 
-**新增功能**：每刷一次RFID卡片，设备会自动增加电池的循环充电次数，并将更新后的数据写回卡片，同时上传到服务器。
+| 参数 | 默认值 | 配置方式 |
+|------|--------|----------|
+| 协议 | TCP | - |
+| 服务器IP | 192.168.1.100 | Web配网页面 |
+| 端口 | 8080 | Web配网页面 |
+| 发送间隔 | 3秒 | 代码常量 |
+| 连接模式 | 长连接 | - |
 
-## 2. 连接信息
-
-- **连接方式**：TCP协议
-- **默认服务器IP**：192.168.1.100
-- **默认服务器端口**：8080
-- **数据发送间隔**：3秒
-- **连接方式**：长连接
-
-## 3. JSON数据格式
-
-设备发送的JSON数据格式如下：
+## JSON数据格式
 
 ```json
 {
   "number": "设备ID",
-  "soc": "电池电量百分比",
+  "soc": "电量百分比",
   "temp": "温度",
   "humidity": "湿度",
   "battery_id": "电池编号",
   "production_date": "生产日期",
-  "cycle_count": "循环充电次数",
-  "ina_voltage": "INA226电压",
-  "ina_current": "INA226电流",
-  "ina_power": "INA226功率"
+  "cycle_count": "循环次数",
+  "ina_voltage": "电压",
+  "ina_current": "电流",
+  "ina_power": "功率"
 }
 ```
 
-## 4. 字段说明
+## 字段说明
 
-| 字段名 | 类型 | 说明 | 示例值 |
-|--------|------|------|--------|
-| number | 字符串 | 设备ID | "25824" |
-| soc | 字符串 | 电池电量百分比，整数 | "95" |
-| temp | 字符串 | 温度（单位：℃），保留1位小数 | "24.5" |
-| humidity | 字符串 | 湿度（单位：%），保留1位小数 | "65.2" |
-| battery_id | 字符串 | 电池编号 | "BAT-001" |
-| production_date | 字符串 | 电池生产日期 | "2023-01-01" |
-| cycle_count | 字符串 | 电池循环充电次数（每刷一次卡自动增加1） | "10" |
-| ina_voltage | 字符串 | INA226电压（单位：V），保留2位小数 | "5.12" |
-| ina_current | 字符串 | INA226电流（单位：A），保留3位小数 | "0.500" |
-| ina_power | 字符串 | INA226功率（单位：W），保留3位小数 | "2.560" |
+| 字段 | 类型 | 精度 | 来源 | 说明 |
+|------|------|------|------|------|
+| number | string | - | 配置 | 设备ID |
+| soc | string | 整数 | 计算 | 电量(%): 基于电压线性计算 |
+| temp | string | 1位小数 | SHT3X | 温度(℃) |
+| humidity | string | 1位小数 | SHT3X | 湿度(%) |
+| battery_id | string | - | RFID块4 | 电池编号 |
+| production_date | string | - | RFID块5 | 生产日期 |
+| cycle_count | string | 整数 | RFID块6 | 循环次数（刷卡自动+1） |
+| ina_voltage | string | 2位小数 | INA226 | 电压(V) |
+| ina_current | string | 3位小数 | INA226 | 电流(A) |
+| ina_power | string | 3位小数 | INA226 | 功率(W) |
 
-## 5. 数据来源
-
-| 字段名 | 数据来源 | 传感器 |
-|--------|----------|--------|
-| number | 设备配置 | 配置文件 |
-| soc | 电池电量 | 计算得出 |
-| temp | 温度 | SHT3X |
-| humidity | 湿度 | SHT3X |
-| battery_id | 电池编号 | RFID卡片 |
-| production_date | 生产日期 | RFID卡片 |
-| cycle_count | 循环充电次数 | RFID卡片 |
-| ina_voltage | INA226电压 | INA226 |
-| ina_current | INA226电流 | INA226 |
-| ina_power | INA226功率 | INA226 |
-
-## 6. 错误处理
-
-- 当WiFi未连接时，设备会跳过数据发送
-- 当服务器连接失败时，设备会在下次尝试重新连接
-- 当传感器读取失败时，对应字段会发送默认值（0或空字符串）
-
-## 7. 配置方式
-
-设备支持通过Web界面进行配置，包括：
-- WiFi网络设置
-- 服务器IP和端口设置
-- 设备ID设置
-
-## 8. 示例数据
+## 示例数据
 
 ```json
 {
@@ -93,65 +61,36 @@
 }
 ```
 
-## 9. 服务器端处理建议
+## 错误处理
 
-1. 接收TCP连接，保持长连接
-2. 解析JSON数据，验证字段完整性
-3. 存储数据到数据库
-4. 发送响应确认收到数据
-5. 处理连接断开和重连
+| 场景 | 设备行为 |
+|------|----------|
+| WiFi未连接 | 跳过发送，下次重试 |
+| TCP连接失败 | 5秒超时，下次重试 |
+| 传感器失败 | 字段发送默认值(0或空) |
+| RFID未刷卡 | battery_id="UNKNOWN", cycle_count=0 |
 
-## 10. 代码实现参考
+## 服务器端建议
 
-### 数据发送核心代码
+1. 保持长连接，避免频繁建立连接
+2. 解析JSON，验证必填字段
+3. 响应任意内容确认收到
+4. 处理断线重连
 
-```cpp
-// 构建JSON数据
-String jsonData = "{";
-jsonData += "\"number\": \"" + String(config.device_id) + "\",";
-jsonData += "\"soc\": \"" + String(soc, 0) + "\",";
-jsonData += "\"temp\": \"" + String(temperature, 1) + "\",";
-jsonData += "\"humidity\": \"" + String(humidity, 1) + "\",";
-jsonData += "\"battery_id\": \"" + currentBattery.batteryId + "\",";
-jsonData += "\"production_date\": \"" + currentBattery.productionDate + "\",";
-jsonData += "\"cycle_count\": \"" + String(currentBattery.cycleCount) + "\",";
-jsonData += "\"ina_voltage\": \"" + String(inaVoltage, 2) + "\",";
-jsonData += "\"ina_current\": \"" + String(inaCurrent, 3) + "\",";
-jsonData += "\"ina_power\": \"" + String(inaPower, 3) + "\"";
-jsonData += "}";
+## 配置参数
 
-// 发送JSON数据
-client->print(jsonData);
-```
+设备通过Web配网页面配置（热点: Device-Config, 密码: 12345678）：
 
-### 连接处理代码
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| WiFi SSID/密码 | 网络连接 | - |
+| 服务器IP | TCP服务器地址 | 192.168.1.100 |
+| 服务器端口 | TCP端口 | 8080 |
+| 设备ID | 唯一标识 | 25824 |
+| 分流电阻值 | INA226精度 | 0.1Ω |
+| 温度上限/下限 | 报警阈值 | 30°C / 0°C |
+| 湿度上限/下限 | 报警阈值 | 80% / 20% |
 
-```cpp
-// 检查TCP连接状态，如果未连接则尝试连接
-if (!client->connected()) {
-  Serial.print("[TCP] 连接服务器 " + String(config.server_ip) + ":" + String(config.server_port) + "...");
-  
-  // 重置客户端，确保干净的连接
-  client->stop();
-  
-  // 设置连接超时为5秒
-  unsigned long connectStart = millis();
-  bool connected = false;
-  
-  while (millis() - connectStart < 5000 && !connected) {
-    if (client->connect(config.server_ip, config.server_port)) {
-      connected = true;
-      Serial.println("成功");
-    } else {
-      Serial.print(".");
-      delay(300);
-    }
-  }
-  
-  if (!connected) {
-    Serial.println("失败（超时）");
-    Serial.println("[TCP] 请检查服务器IP、端口和网络连接");
-    return;
-  }
-}
-```
+---
+
+**实现代码**: `src/sensors.cpp` → `sendDataToServer()`

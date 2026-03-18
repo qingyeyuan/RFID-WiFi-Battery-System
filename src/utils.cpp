@@ -69,16 +69,30 @@ void readConfig() {
       config.shunt_resistor = 0.1; // 如果分流电阻值无效，使用默认值
       Serial.println("[CFG] 分流电阻值无效，使用默认值0.1欧姆");
     }
-    // 确保温湿度报警值有效
-    if (config.temp_max <= config.temp_min || isnan(config.temp_max) || isnan(config.temp_min)) {
+    // 确保温湿度报警值有效（包含范围检查）
+    const float TEMP_MIN_RANGE = -20.0;
+    const float TEMP_MAX_RANGE = 100.0;
+    const float HUMIDITY_MIN_RANGE = 0.0;
+    const float HUMIDITY_MAX_RANGE = 100.0;
+    
+    bool tempValid = (config.temp_max > config.temp_min && 
+                      config.temp_min >= TEMP_MIN_RANGE && 
+                      config.temp_max <= TEMP_MAX_RANGE &&
+                      !isnan(config.temp_max) && !isnan(config.temp_min));
+    bool humidityValid = (config.humidity_max > config.humidity_min && 
+                          config.humidity_min >= HUMIDITY_MIN_RANGE && 
+                          config.humidity_max <= HUMIDITY_MAX_RANGE &&
+                          !isnan(config.humidity_max) && !isnan(config.humidity_min));
+    
+    if (!tempValid) {
       config.temp_max = 30.0;
       config.temp_min = 0.0;
-      Serial.println("[CFG] 温度报警值无效，使用默认值");
+      Serial.println("[CFG] 温度报警值无效，使用默认值(0~30°C)");
     }
-    if (config.humidity_max <= config.humidity_min || isnan(config.humidity_max) || isnan(config.humidity_min)) {
+    if (!humidityValid) {
       config.humidity_max = 80.0;
       config.humidity_min = 20.0;
-      Serial.println("[CFG] 湿度报警值无效，使用默认值");
+      Serial.println("[CFG] 湿度报警值无效，使用默认值(20~80%)");
     }
   }
   Serial.println("[CFG] 配置读取完成");

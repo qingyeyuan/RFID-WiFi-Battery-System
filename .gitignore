@@ -2,3 +2,6 @@
 *.bin
 *.elf
 *.hex
+
+.iflow/
+gha-creds-*.json

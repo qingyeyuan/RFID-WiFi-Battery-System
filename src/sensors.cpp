@@ -35,6 +35,8 @@ void initSensors() {
     }
   }
   if (!sht31Ok) {
+    delete sht31;
+    sht31 = nullptr;
     Serial.println("[ERR] SHT3X 初始化失败，将继续运行但无法读取温湿度数据");
   }
 
@@ -94,6 +96,8 @@ void initSensors() {
     }
   }
   if (!ina226Ok) {
+    delete ina226;
+    ina226 = nullptr;
     Serial.println("[ERR] INA226 初始化失败，将继续运行但无法读取电流电压数据");
   }
 
